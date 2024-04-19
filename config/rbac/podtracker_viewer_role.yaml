@@ -1,0 +1,27 @@
+# permissions for end users to view podtrackers.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  labels:
+    app.kubernetes.io/name: clusterrole
+    app.kubernetes.io/instance: podtracker-viewer-role
+    app.kubernetes.io/component: rbac
+    app.kubernetes.io/created-by: packettracker
+    app.kubernetes.io/part-of: packettracker
+    app.kubernetes.io/managed-by: kustomize
+  name: podtracker-viewer-role
+rules:
+- apiGroups:
+  - network.tracker.io
+  resources:
+  - podtrackers
+  verbs:
+  - get
+  - list
+  - watch
+- apiGroups:
+  - network.tracker.io
+  resources:
+  - podtrackers/status
+  verbs:
+  - get

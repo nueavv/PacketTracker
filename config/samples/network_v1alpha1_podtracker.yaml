@@ -1,0 +1,12 @@
+apiVersion: network.tracker.io/v1alpha1
+kind: PodTracker
+metadata:
+  labels:
+    app.kubernetes.io/name: podtracker
+    app.kubernetes.io/instance: podtracker-sample
+    app.kubernetes.io/part-of: packettracker
+    app.kubernetes.io/managed-by: kustomize
+    app.kubernetes.io/created-by: packettracker
+  name: podtracker-sample
+spec:
+  # TODO(user): Add fields here
