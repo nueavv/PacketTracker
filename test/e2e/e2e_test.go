@@ -27,6 +27,7 @@ import (
 	"github.com/nueavv/PacketTracker/test/utils"
 )
 
+// manager 네임스페이스 설정
 const namespace = "packettracker-system"
 
 var _ = Describe("controller", Ordered, func() {

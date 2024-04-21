@@ -28,9 +28,8 @@ type PodTrackerSpec struct {
 	// INSERT ADDITIONAL SPEC FIELDS - desired state of cluster
 	// Important: Run "make" to regenerate code after modifying this file
 
-	TargetNamespace string `json:"targetNamespace"`
-	PodSelector metav1.LabelSelector `json:"podSelector"`
-	TcpDumpOptions string `json:"tcpDumpOptions"`
+	PodSelector   metav1.LabelSelector `json:"podSelector"`
+	TcpDumpOption string               `json:"tcpDumpOptions"`
 }
 
 // PodTrackerStatus defines the observed state of PodTracker
