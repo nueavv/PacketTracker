@@ -89,3 +89,9 @@ WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 See the License for the specific language governing permissions and
 limitations under the License.
 
+
+## TODO
+1. reconcile 타임 확인
+2. 타겟팅하는 파드가 변경되는거 감지할 방법 찾기
+3. calicoctl 컨테이너 넣기 
+4. finalizer넣어서 삭제 기능 추가
