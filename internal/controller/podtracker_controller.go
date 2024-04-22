@@ -18,6 +18,7 @@ package controller
 
 import (
 	"context"
+	"reflect"
 
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -43,8 +44,8 @@ type PodTrackerReconciler struct {
 	Scheme *runtime.Scheme
 }
 
-// +kubebuilder:rbac:groups="",resources=pods,verbs=get;list;watch;create;update;patch;delete
-// +kubebuilder:rbac:groups="",resources=pods/status,verbs=get;update;patch
+// +kubebuilder:rbac:groups=core,resources=pods,verbs=get;list;watch;create;update;patch;delete
+// +kubebuilder:rbac:groups=core,resources=pods/status,verbs=get;update;patch
 // +kubebuilder:rbac:groups=apps,resources=deployments,verbs=get;list;watch
 // +kubebuilder:rbac:groups=apps,resources=deployments/status,verbs=get
 // +kubebuilder:rbac:groups=network.tracker.io,resources=podtrackers,verbs=get;list;watch;create;update;patch;delete
@@ -86,6 +87,28 @@ func (r *PodTrackerReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 		return ctrl.Result{}, err
 	}
 
+	if len(tdPods.Items) == 0 {
+		logger.Info("No Tracking Pods found")
+
+		if len(tr.Status.TargetInfo) > 0 {
+			// tracker 파드 전체 삭제
+			err := r.DeleteAllOf(ctx, &corev1.Pod{}, client.MatchingLabels{"podtracker": tr.Name})
+			if err != nil {
+				logger.Error(err, "Failed to delete tracker Pods")
+				return ctrl.Result{}, err
+			}
+
+			tr.Status.TargetInfo = nil
+			err = r.Status().Update(ctx, tr)
+			if err != nil {
+				logger.Error(err, "Failed to update PodTracker status")
+				return ctrl.Result{}, err
+			}
+			logger.Info("All Tracker Pods deleted")
+		}
+		return ctrl.Result{Requeue: true}, nil
+	}
+
 	// tracker 파드 리스트 가져오기
 	trLabels := labels.Set(map[string]string{"podtracker": tr.Name})
 	trListOptions := &client.ListOptions{
@@ -99,54 +122,53 @@ func (r *PodTrackerReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 		return ctrl.Result{}, err
 	}
 
-	if len(tdPods.Items) == 0 {
-		logger.Info("No Tracking Pods found")
-		if len(trPods.Items) > 0 {
-			// TODO
-			for _, trPod := range trPods.Items {
-				if err := r.Delete(ctx, &trPod); err != nil {
-					logger.Error(err, "Failed to delete tracker Pod", "PodName", trPod.Name)
+	if !reflect.DeepEqual(getNames(tdPods.Items), getNames(trPods.Items)) {
+		logger.Info("Tracker Pods and Tracked Pods are not equal")
+
+		// tracker pod 생성
+		var tdPodNames []string
+		for _, tdPod := range tdPods.Items {
+			logger.Info(tdPod.Name)
+			if !hasTrackerPod(trPods, tdPod.Name) {
+				trPod, err := r.podForPodTracker(tr, &tdPod)
+				if err != nil {
+					logger.Error(err, "Failed to create a new Pod", "PodName", tdPod.Name)
 					return ctrl.Result{}, err
 				}
-				logger.Info("Tracker Pod deleted", "PodName", trPod.Name)
-			}
-		}
-		return ctrl.Result{}, nil
-	}
+				if err := r.Create(ctx, trPod); err != nil {
+					logger.Error(err, "Failed to create a new Pod", "PodName", tdPod.Name)
+					return ctrl.Result{}, err
+				}
+				logger.Info("Pod created", "PodName", trPod.Name)
+				tr.Status.TargetInfo = append(tr.Status.TargetInfo, networkv1alpha1.TargetPodStatus{
+					TrackerPodName: trPod.Name,
+					TrackedPodName: tdPod.Name,
+				})
 
-	// tracker pod 생성
-	var tdPodNames []string
-	for _, tdPod := range tdPods.Items {
-		logger.Info(tdPod.Name)
-		if !hasTrackerPod(trPods, tdPod.Name) {
-			trPod, err := r.podForPodTracker(tr, &tdPod)
-			if err != nil {
-				logger.Error(err, "Failed to create a new Pod", "PodName", tdPod.Name)
+				err = r.Status().Update(ctx, tr)
+				if err != nil {
+					logger.Error(err, "Failed to update PodTracker status")
+					return ctrl.Result{}, err
+				}
+			}
+			tdPodNames = append(tdPodNames, tdPod.Name+PodSuffixName)
+		}
+
+		logger.Info("Number of Tracker Pods:", "Count", len(trPods.Items))
+		for _, trPod := range trPods.Items {
+			if contains(tdPodNames, trPod.Name) {
+				continue
+			}
+
+			if err := r.Delete(ctx, &trPod); err != nil {
+				logger.Error(err, "Failed to delete tracker Pod", "PodName", trPod.Name)
 				return ctrl.Result{}, err
 			}
-			if err := r.Create(ctx, trPod); err != nil {
-				logger.Error(err, "Failed to create a new Pod", "PodName", tdPod.Name)
-				return ctrl.Result{}, err
-			}
-			logger.Info("Pod created", "PodName", trPod.Name)
+			logger.Info("Tracker Pod deleted", "PodName", trPod.Name)
 		}
-		tdPodNames = append(tdPodNames, tdPod.Name+PodSuffixName)
 	}
 
-	logger.Info("Number of Tracker Pods:", "Count", len(trPods.Items))
-	for _, trPod := range trPods.Items {
-		if contains(tdPodNames, trPod.Name) {
-			continue
-		}
-
-		if err := r.Delete(ctx, &trPod); err != nil {
-			logger.Error(err, "Failed to delete tracker Pod", "PodName", trPod.Name)
-			return ctrl.Result{}, err
-		}
-		logger.Info("Tracker Pod deleted", "PodName", trPod.Name)
-	}
-
-	return ctrl.Result{}, nil
+	return ctrl.Result{Requeue: true}, nil
 }
 
 func contains(s []string, e string) bool {
@@ -156,6 +178,18 @@ func contains(s []string, e string) bool {
 		}
 	}
 	return false
+}
+
+func compare(t1, t2 *corev1.Pod) bool {
+	return t1.Name == t2.Name
+}
+
+func getNames(pods []corev1.Pod) []string {
+	var names []string
+	for _, p := range pods {
+		names = append(names, p.Name)
+	}
+	return names
 }
 
 // SetupWithManager sets up the controller with the Manager.

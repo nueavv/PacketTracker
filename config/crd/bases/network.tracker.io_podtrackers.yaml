@@ -90,6 +90,21 @@ spec:
             type: object
           status:
             description: PodTrackerStatus defines the observed state of PodTracker
+            properties:
+              targetInfo:
+                items:
+                  properties:
+                    trackedPodName:
+                      type: string
+                    trackerPodName:
+                      type: string
+                  required:
+                  - trackedPodName
+                  - trackerPodName
+                  type: object
+                type: array
+            required:
+            - targetInfo
             type: object
         type: object
     served: true

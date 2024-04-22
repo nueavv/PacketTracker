@@ -32,10 +32,14 @@ type PodTrackerSpec struct {
 	TcpDumpOption string               `json:"tcpDumpOptions"`
 }
 
+type TargetPodStatus struct {
+	TrackerPodName string `json:"trackerPodName"`
+	TrackedPodName string `json:"trackedPodName"`
+}
+
 // PodTrackerStatus defines the observed state of PodTracker
 type PodTrackerStatus struct {
-	// INSERT ADDITIONAL STATUS FIELD - define observed state of cluster
-	// Important: Run "make" to regenerate code after modifying this file
+	TargetInfo []TargetPodStatus `json:"targetInfo"`
 }
 
 //+kubebuilder:object:root=true
